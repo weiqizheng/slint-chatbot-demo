@@ -2,8 +2,9 @@ import { Button, VerticalBox, TextEdit } from "std-widgets.slint";
 
 export component AppWindow inherits Window {
     title: "OpenChat Bot";
-    width: 500px;
-    height: 550px;
+    // SLINT_FULLSCREEN=1 will make it full screen
+    width: 1440px;
+    height: 850px;
     forward-focus: ed2;
     // in-out property<int> counter: 42;
     in-out property<string> dialog;
@@ -11,11 +12,12 @@ export component AppWindow inherits Window {
     
     // callback request-increase-value();
     callback send-ask-content(string);
+    callback question-edited(string);
 
     VerticalBox {
         Text {
             // text: "Model: openchat_3.5.Q8_0.gguf";
-            text: "Model: openchat_3.5.Q4_K_M.gguf";
+            text: "Model: openchat-3.5-0106.Q4_K_M.gguf";
         }
         ed1 := TextEdit {
             font-size: 15px;
@@ -30,6 +32,9 @@ export component AppWindow inherits Window {
             width: parent.width - 20px;
             height: 100px;
             text <=> root.input-ask;
+            edited(text) => {
+                root.question-edited(text);
+            }
         }
         Button {
             text: "Send";

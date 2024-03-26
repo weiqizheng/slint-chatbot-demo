@@ -56,13 +56,23 @@ pub fn start_engine(ui_handle: slint::Weak<crate::AppWindow>, receiver: std::syn
 
     let args = Args {
         tokenizer: String::from("./tokenizer.json"),
-        model: String::from("./openchat_3.5.Q4_K_M.gguf"),
-        sample_len: 300,
+        model: String::from("./openchat-3.5-0106.Q4_K_M.gguf"),
+        sample_len: 1000,
         temperature: 0.8,
         seed: 299792458,
         repeat_penalty: 1.1,
         repeat_last_n: 64,
         gqa: 8,
+    };
+
+    // device
+    // let device = Device::Cpu;
+    let device = match Device::new_metal(0) {
+        Ok(metal_device) => metal_device,
+        Err(err) => {
+            println!("metal device init failed {err}");
+            Device::Cpu
+        },
     };
 
     // load model
@@ -76,7 +86,7 @@ pub fn start_engine(ui_handle: slint::Weak<crate::AppWindow>, receiver: std::syn
     for (_, tensor) in model.tensor_infos.iter() {
         let elem_count = tensor.shape.elem_count();
         total_size_in_bytes +=
-            elem_count * tensor.ggml_dtype.type_size() / tensor.ggml_dtype.blck_size();
+            elem_count * tensor.ggml_dtype.type_size() / tensor.ggml_dtype.block_size();
     }
     let msg = format!(
         "loaded {:?} tensors ({}bytes) in {:.2}s",
@@ -86,7 +96,7 @@ pub fn start_engine(ui_handle: slint::Weak<crate::AppWindow>, receiver: std::syn
     );
     super::update_dialog(ui_handle.clone(), msg);
     super::update_dialog(ui_handle.clone(), "loading model...".to_string());
-    let mut model = quantized_model::ModelWeights::from_gguf(model, &mut file)?;
+    let mut model = quantized_model::ModelWeights::from_gguf(model, &mut file, &device)?;
     let msg = format!("model built.");
     super::update_dialog(ui_handle.clone(), msg);
 
@@ -118,7 +128,7 @@ pub fn start_engine(ui_handle: slint::Weak<crate::AppWindow>, receiver: std::syn
 
         let start_prompt_processing = std::time::Instant::now();
         let mut next_token = {
-            let input = Tensor::new(prompt_tokens, &Device::Cpu)?.unsqueeze(0)?;
+            let input = Tensor::new(prompt_tokens, &device)?.unsqueeze(0)?;
             let logits = model.forward(&input, 0)?;
             let logits = logits.squeeze(0)?;
             logits_processor.sample(&logits)?
@@ -137,7 +147,7 @@ pub fn start_engine(ui_handle: slint::Weak<crate::AppWindow>, receiver: std::syn
         let to_sample = args.sample_len.saturating_sub(1);
         let mut sampled = 0;
         for index in 0..to_sample {
-            let input = Tensor::new(&[next_token], &Device::Cpu)?.unsqueeze(0)?;
+            let input = Tensor::new(&[next_token], &device)?.unsqueeze(0)?;
             let logits = model.forward(&input, prompt_tokens.len() + index)?;
             let logits = logits.squeeze(0)?;
             let logits = if args.repeat_penalty == 1. {
